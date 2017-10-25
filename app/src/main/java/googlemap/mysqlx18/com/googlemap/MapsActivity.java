@@ -14,26 +14,35 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.widget.TextView;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
+public class MapsActivity extends FragmentActivity implements OnMapReadyCallback, GoogleMap.InfoWindowAdapter {
 
     private GoogleMap mMap;
     double longitude;
     double latitude;
     double speed;
     double altitude;
+    long GPStime;
+    Date GPSDate;
     Context context;
     private LocationManager locationManager;
     private LocationListener listener;
@@ -41,16 +50,20 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private String zipCode = "";
     boolean fineLocationAccepted;
     private static final int REQUEST_CODE = 200;
+    DatabaseReference databaseGPSData;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getZipCode();
+        getGPSData();
         setContentView(R.layout.activity_maps);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+        this.context = context;
+        databaseGPSData = FirebaseDatabase.getInstance().getReference("GPSData");
+
     }
 
 
@@ -72,8 +85,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 //        mMap.addMarker(new MarkerOptions().position(sydney).title("Marker in Sydney"));
 //        mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney));
 
+//        mMap.setOnMarkerClickListener(this);
         goMyLocation();
     }
+
 
     @Override
     public void onRequestPermissionsResult(int permsRequestCode, String[] permissions, int[] grantResults) {
@@ -93,13 +108,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         if(fineLocationAccepted == true){
             Log.d("Zipcode", "All permissions granted");
-            getZipCode();
+            getGPSData();
             goMyLocation();
         }
 
     }
 
-    public void getZipCode(){
+    public void getGPSData(){
         // first check for permissions
         if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.d("Zipcode", "checkSelfPermission");
@@ -123,12 +138,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 latitude = location.getLatitude();
                 speed = location.getSpeed();
                 altitude = location.getAltitude();
+                GPStime = location.getTime();
+                GPSDate = new Date(GPStime);
                 goMyLocation();
 
                 Log.d("Zipcode", "Long: " + longitude);
                 Log.d("Zipcode", "Lat: " + latitude);
                 Log.d("Zipcode", "speed: " + speed);
                 Log.d("Zipcode", "alt: " + altitude);
+                Log.d("Zipcode", "time: " + GPStime);
+                Log.d("Zipcode", "date: " + GPSDate);
 
                 try {
                     addresses = geocoder.getFromLocation(latitude, longitude, 1);
@@ -165,7 +184,39 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     public void goMyLocation(){
         LatLng myLocation = new LatLng(latitude, longitude);
         mMap.clear();
-        mMap.addMarker(new MarkerOptions().position(myLocation).title("My Location"));
+        mMap.addMarker(new MarkerOptions().position(myLocation)
+                .title("My Location"));
+
         mMap.moveCamera(CameraUpdateFactory.newLatLng(myLocation));
+        mMap.setInfoWindowAdapter(this);
+
+        //String userID = databaseGPSData.push().getKey();
+        String userID = "Marc McLean";
+        GPSData gpsData = new GPSData(userID, longitude, latitude, speed, altitude, GPStime, GPSDate);
+        //databaseGPSData.child(String.valueOf(GPStime)).setValue(gpsData);
+        databaseGPSData.child(userID + "/" + String.valueOf(GPStime)).setValue(gpsData);
+
+    }
+
+    @Override
+    public View getInfoWindow(Marker marker) {
+        return null;
+    }
+
+    @Override
+    public View getInfoContents(Marker marker) {
+
+        View view = LayoutInflater.from(getApplicationContext()).inflate(R.layout.info_window, null, false);
+        TextView info_lat = (TextView)view.findViewById(R.id.info_lat);
+        info_lat.setText("Lat: " + latitude);
+        TextView info_long = (TextView)view.findViewById(R.id.info_long);
+        info_long.setText("Long: " + longitude);
+        TextView info_alt = (TextView)view.findViewById(R.id.info_alt);
+        info_alt.setText("Alt: " + altitude);
+        TextView info_speed = (TextView)view.findViewById(R.id.info_speed);
+        info_speed.setText("Speed: " + speed);
+        TextView info_date = (TextView)view.findViewById(R.id.info_date);
+        info_date.setText("Date: " + GPSDate);
+        return view;
     }
 }
